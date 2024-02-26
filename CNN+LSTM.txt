@@ -1,0 +1,85 @@
+import torch
+import torch.nn as nn
+import torchvision.models as models
+import torchvision.transforms as transforms
+
+# Define the CNN model
+class CNN(nn.Module):
+    def __init__(self):
+        super(CNN, self).__init__()
+        self.resnet = models.resnet18(pretrained=True)  # Pretrained ResNet-18 model
+        self.resnet.fc = nn.Sequential()  # Remove the fully connected layer
+
+    def forward(self, images):
+        features = self.resnet(images)
+        return features
+
+# Define the LSTM model
+class LSTM(nn.Module):
+    def __init__(self, input_size, hidden_size, num_layers, output_size):
+        super(LSTM, self).__init__()
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+        self.fc = nn.Linear(hidden_size, output_size)
+
+    def forward(self, features):
+        # Initialize hidden state with zeros
+        h0 = torch.zeros(self.num_layers, features.size(0), self.hidden_size).to(device)
+        c0 = torch.zeros(self.num_layers, features.size(0), self.hidden_size).to(device)
+
+        # Forward propagate LSTM
+        out, _ = self.lstm(features, (h0, c0))  # out: tensor of shape (batch_size, seq_length, hidden_size)
+
+        # Decode the hidden state of the last time step
+        out = self.fc(out[:, -1, :])
+        return out
+
+# Combine CNN and LSTM
+class ImageCaptioningModel(nn.Module):
+    def __init__(self, cnn, lstm):
+        super(ImageCaptioningModel, self).__init__()
+        self.cnn = cnn
+        self.lstm = lstm
+
+    def forward(self, images):
+        features = self.cnn(images)
+        captions = self.lstm(features)
+        return captions
+
+# Initialize device
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+# Define hyperparameters
+input_size = 512  # Size of CNN output
+hidden_size = 512  # Size of LSTM hidden state
+num_layers = 1  # Number of layers in LSTM
+output_size = vocab_size  # Size of vocabulary for report generation
+
+# Instantiate models
+cnn = CNN().to(device)
+lstm = LSTM(input_size, hidden_size, num_layers, output_size).to(device)
+model = ImageCaptioningModel(cnn, lstm).to(device)
+
+# Define loss function and optimizer
+criterion = nn.CrossEntropyLoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+
+# Training loop (assuming you have train_loader for your dataset)
+for epoch in range(num_epochs):
+    for images, captions in train_loader:
+        images = images.to(device)
+        captions = captions.to(device)
+
+        # Forward pass
+        outputs = model(images)
+        loss = criterion(outputs, captions)
+
+        # Backward pass and optimization
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        # Print training loss
+        if (i+1) % 100 == 0:
+            print(f'Epoch [{epoch+1}/{num_epochs}], Step [{i+1}/{total_steps}], Loss: {loss.item():.4f}')
